@@ -69,10 +69,10 @@ class GatedMultiHeadAttention(nn.Module):
           - x: [batch_size, nchannel, reply_embedim]
           - m: [batch_size, nchannel]
         """
-        n, s, e = x.shape
+        nbatch, nchannel, replydim = x.shape
         ## tile is absent in pytorch version 1.7.0
         # q = torch.tile(self.query.unsqueeze(dim=1), dims=(1, n, 1))
-        q = self.query.unsqueeze(dim = 1).repeat(repeats = (1, n, 1))
+        q = self.query.unsqueeze(dim = 1).repeat(repeats = (1, nbatch, 1))
         ## m1: [s, n, e]
         m1 = self.layernorm_1(x).transpose(0, 1)
         v = m1
@@ -91,13 +91,24 @@ class GatedMultiHeadAttention(nn.Module):
         )
         ## attn_out: [n, self.nquery, self.emebdim]
         attn_out = attn_out.transpose(0,1)
-        avg_x = torch.sum(x, dim=1) / torch.sum(m, dim=1, keepdim=True)
+
+        ## remove this avg_x and gated part.
+        ## Maybe average gated makes the signal weaker in our case.
+        # avg_x = torch.sum(x, dim=1) / torch.sum(m, dim=1, keepdim=True)
         # g = torch.tile(self.w(avg_x).unsqueeze(dim=1), dims=(1, self.nquery, 1))
-        g = self.w(avg_x).unsqueeze(dim=1).repeat(repeats = (1, self.nquery, 1))
-        ## residual
-        r = (g + attn_out).contiguous().view(n, -1)
-        r = self.layernorm_2(r)
-        return r
+        # g = self.w(avg_x).unsqueeze(dim=1).repeat(repeats = (1, self.nquery, 1)) 
+        ## gated attention
+        # r = (g * attn_out).contiguous().view(n, -1)
+
+        r = attn_out.contiguous().view(nbatch, -1)
+        # r = self.layernorm_2(r)
+        
+        ## add residual structure in the transformer
+        ## layernorm(x + sublayer(x))
+        avg_x = torch.sum(x, dim=1) / torch.sum(m, dim=1, keepdim=True)
+        g = self.rw(avg_x)
+        rr = self.layernorm_2(g + r)
+        return rr
 
 
 class TumorTypeMLP(nn.Module):

@@ -93,9 +93,9 @@ class GatedMultiHeadAttention(nn.Module):
         attn_out = attn_out.transpose(0,1)
         avg_x = torch.sum(x, dim=1) / torch.sum(m, dim=1, keepdim=True)
         # g = torch.tile(self.w(avg_x).unsqueeze(dim=1), dims=(1, self.nquery, 1))
-        g = self.w(avg_x).unsqueeze(dim=1).repeat(repeats = (1, self.nquery, 1)) 
-        ## gated attention
-        r = (g * attn_out).contiguous().view(n, -1)
+        g = self.w(avg_x).unsqueeze(dim=1).repeat(repeats = (1, self.nquery, 1))
+        ## residual
+        r = (g + attn_out).contiguous().view(n, -1)
         r = self.layernorm_2(r)
         return r
 

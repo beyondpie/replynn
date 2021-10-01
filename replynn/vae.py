@@ -21,43 +21,34 @@ def sort_seq_by_len(
     x_: torch.LongTensor = x.index_select(batch_dim, sorted_indices)
     return (x_, sorted_lens, sorted_indices)
 
-def randn(mu: torch.FloatTensor, logvar: torch.FloatTensor)-> torch.Tensor:
+
+def randn(mu: torch.FloatTensor, logvar: torch.FloatTensor) -> torch.Tensor:
     eps = torch.randn_like(logvar)
     sd = torch.exp(0.5 * logvar)
-    return (mu + eps * sd)
+    return mu + eps * sd
 
-def kl_to_stdn(mu:torch.FloatTensor, logvar: torch.FloatTensor) -> torch.Tensor:
+
+def kl_to_stdn(mu: torch.FloatTensor, logvar: torch.FloatTensor) -> torch.Tensor:
     """
     KL(q(z)||p0(z)), where p0(z) is the prior of the hidden variable z.
     and p0 is standard normal.
     """
     kl = -0.5 * torch.sum(1 + logvar - torch.pow(mu, 2) - torch.exp(logvar))
     return kl
-    
+
 
 class GRUEncoder(nn.Module):
     def __init__(
         self,
         embedding: nn.Module,
         hidden_size: int,
-        out_channels: int,
         rnndp: float = 0.0,
-        bidirectional=False,
+        bidirectional: bool = False,
     ):
         super().__init__()
         self.dpr = rnndp
         self.embedding: nn.Module = embedding
         self.embed_dim: int = self.embedding.embedding_dim
-        self.out_channels: int = out_channels
-        self.conv1d3mer = nn.Conv1d(
-            in_channels=self.embed_dim,
-            out_channels=self.out_channels,
-            kernel_size=3,
-            stride=1,
-            padding=1,
-            dilation=1,
-            bias=True,
-        )
         self.hidden_size = hidden_size
         self.rnn: nn.Module = nn.GRU(
             input_size=out_channels,
@@ -69,34 +60,26 @@ class GRUEncoder(nn.Module):
             batch_first=True,
         )
 
+    def after_embed_hook(self, embedx: torch.FloatTensor) -> torch.Tensor:
+        return embedx
+
     def forward(
         self,
         padx: torch.LongTensor,
         len_of_x: torch.LongTensor,
         lh: torch.Tensor = None,
+        enforce_sorted=False,
     ) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
         """Output is padedout and last hidden.
-
-        Please use the sorted x (descend on seq length).
-        For example, you can try to sort as follows:
-        sorted_x_lengths, sorted_idx = torch.sort(x_lengths, descending=True)
-        batch_dim = 0 if batch_first else 1
-        sorted_idx = sorted_idx.to(x_with_pad.device)
-        sorted_x_with_pad = x_with_pad.index_select(batch_dim, sorted_idx)
-
-        We use sorted data since it's logic is easy otherwise it will
-        be a little tricky to keep in mind that the data order might change
-        after rnn pack them.
 
         See torch.nn.utils.rnn.pack_padded_sequence and
         check torch.nn.utils.rnn.PackedSequence class for details.
         """
         embeded = self.embedding(padx)
         embeded = torch.transpose(input=embeded, dim0=1, dim1=2)
-        convembed = self.conv1d3mer(embeded)
-        convembed = torch.transpose(input=convembed, dim0=1, dim1=2)
+        afembed = self.after_embed_hook(embeded)
         packedx = nn.utils.rnn.pack_padded_sequence(
-            convembed, len_of_x.cpu(), batch_first=True, enforce_sorted=True
+            afembed, len_of_x.cpu(), batch_first=True, enforce_sorted=enforce_sorted
         )
         ## lh shape : [num_layers(=1) * num_directtions, batch_size, hidden_size]
         ## lh is the last output of packedout,
@@ -110,6 +93,54 @@ class GRUEncoder(nn.Module):
         )
         lh = lh.transpose(0, 1).flatten(1)
         return (paddedout, lh)
+
+
+class ConvGRUEncoder(GRUEncoder):
+    def __init__(
+        self,
+        embedding: nn.Module,
+        hidden_size: int,
+        out_channels: int,
+        rnndp: float = 0.0,
+    ):
+        super().__init__(
+            embedding=embedding,
+            hidden_size=hidden_size,
+            rnndp=rnndp,
+            bidirectional=False,
+        )
+        self.embed_dim: int = self.embedding.embedding_dim
+        self.out_channels: int = out_channels
+        self.conv1d3mer = nn.Conv1d(
+            in_channels=self.embed_dim,
+            out_channels=self.out_channels,
+            kernel_size=3,
+            stride=1,
+            padding=1,
+            dilation=1,
+            bias=True,
+        )
+
+    def after_embed_hook(self, embedx: torch.FloatTensor) -> torch.Tensor:
+        convembed = self.conv1d3mer(embedx)
+        convembed = torch.transpose(input=convembed, dim0=1, dim1=2)
+        return convembed
+
+
+class BiGRUEncoder(nn.Module):
+    def __init__(
+        self,
+        embedding: nn.Module,
+        hidden_size: int,
+        rnndp: float = 0.0,
+    ) -> None:
+        super().__init__(
+            embedding=embedding,
+            hidden_size=hidden_size,
+            rnndp=rnndp,
+            bidirectional=True,
+        )
+
 
 class MLPDecoder(nn.Module):
     def __init__(self, l1: int, l2: int):
@@ -132,7 +163,7 @@ class MLPDecoder(nn.Module):
         return r
 
 
-class GRUMLPVAE(nn.Module):
+class ConvGRUMLPVAE(nn.Module):
     def __init__(
         self,
         latent_size: int = 48,
@@ -149,7 +180,7 @@ class GRUMLPVAE(nn.Module):
         self.latent_size = latent_size
         self.decode_l2: int = 4 * self.latent_size
         self.embedding: nn.Embedding = self.set_embedding()
-        self.encoder: GRUEncoder = GRUEncoder(
+        self.encoder: ConvGRUEncoder = ConvGRUEncoder(
             embedding=self.embedding,
             hidden_size=self.hidden_size,
             out_channels=self.out_channels,
@@ -250,4 +281,3 @@ class GRUMLPVAE(nn.Module):
         z = normal_reparam(z_mu, z_logvar)
         out = self.decoder(z)
         return (z, out, z_mu, z_logvar, x, l, m)
-

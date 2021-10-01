@@ -124,6 +124,7 @@ class ConvGRUEncoder(GRUEncoder):
     def after_embed_hook(self, embedx: torch.FloatTensor) -> torch.Tensor:
         convembed = self.conv1d3mer(embedx)
         convembed = torch.transpose(input=convembed, dim0=1, dim1=2)
+        ## TODO: add batch normalization
         return convembed
 
 

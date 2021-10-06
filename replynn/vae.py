@@ -4,6 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from .data import outdim, atchley_weight, raw_blosum_score, nng_blosum_score
 
 
 def sort_seq_by_len(
@@ -120,12 +121,13 @@ class ConvGRUEncoder(GRUEncoder):
             dilation=1,
             bias=True,
         )
-        self.ln :nn.Module = nn.LayerNorm(normalized_shape=self.embed_dim,
-                                          eps = 1e-5, elementwise_affine=True)
+        self.ln: nn.Module = nn.LayerNorm(
+            normalized_shape=self.embed_dim, eps=1e-5, elementwise_affine=True
+        )
 
     def after_embed_hook(self, embedx: torch.FloatTensor) -> torch.Tensor:
         ## conv1d on: [N, C_in, L], and generate [N, C_out, L]
-        embedx = torch.transpose(input = embedx, dim0 = 1, dim1 = 2)
+        embedx = torch.transpose(input=embedx, dim0=1, dim1=2)
         ## embeded will occupy one position after the end of the sequence.
         ## we currently ignore this since layer in RNN, we have the length info,
         ## which will ignore this.
@@ -136,7 +138,7 @@ class ConvGRUEncoder(GRUEncoder):
         return convembed
 
 
-class BiGRUEncoder(nn.Module):
+class BiGRUEncoder(GRUEncoder):
     def __init__(
         self,
         embedding: nn.Module,
@@ -172,55 +174,54 @@ class MLPDecoder(nn.Module):
         return r
 
 
-class ConvGRUMLPVAE(nn.Module):
+class GRUMLPVAE(nn.Module):
     def __init__(
         self,
-        latent_size: int = 48,
-        hidden_size: int = 16,
-        out_channels: int = 32,
-        rnndp: float = 0.0,
-        bidirectional: bool = False,
-    ) -> None:
+        latent_size: int,
+        hidden_size: int,
+        decode_inner_size: int,
+        raw_blosum: bool,
+        bidirectional: bool,
+        rnndp: float,
+    ):
         super().__init__()
-        self.hidden_size: int = hidden_size
-        self.bidirectional: bool = bidirectional
-        self.out_channels: int = out_channels
-        self.indim_of_y_nn: int = 2 * hidden_size if self.bidirectional else hidden_size
-        self.latent_size = latent_size
-        self.decode_l2: int = 4 * self.latent_size
-        self.embedding: nn.Embedding = self.set_embedding()
-        self.encoder: ConvGRUEncoder = ConvGRUEncoder(
-            embedding=self.embedding,
-            hidden_size=self.hidden_size,
-            out_channels=self.out_channels,
-            rnndp=rnndp,
-            bidirectional=bidirectional,
-        )
-        ## remove Tanh in both mu and logvar
-        ## not limit the value of mu and var
+        self.set_embedding()
+        ## NOTE/TODO: move self.blosum62 to device when needed.
+        if raw_blosum:
+            self.blosum62: torch.Tensor = torch.from_numpy(raw_blosum_score).to(
+                torch.float
+            )
+        else:
+            self.blosum62: torch.Tensor = torch.from_numpy(nng_blosum_score).to(
+                torch.float
+            )
+        ## Different VAE will set encoder accordingly
+        self.encoder: GRUEncoder = None
+        indim_of_y_nn: int = 2 * hidden_size if self.bidirectional else hidden_size
         self.mumlp: nn.Module = nn.Sequential(
             nn.Linear(
-                in_features=self.indim_of_y_nn,
-                out_features=self.latent_size,
+                in_features=indim_of_y_nn,
+                out_features=latent_size,
                 bias=True,
             )
             # nn.Tanh(),
         )
         self.logvmlp: nn.Module = nn.Sequential(
             nn.Linear(
-                in_features=self.indim_of_y_nn,
-                out_features=self.latent_size,
+                in_features=indim_of_y_nn,
+                out_features=latent_size,
                 bias=True,
             )
             # nn.Tanh(),
         )
         self.decoder: MLPDecoder = MLPDecoder(
-            l1=self.latent_size,
-            l2=self.decode_l2,
+            l1=latent_size,
+            l2=decode_inner_size,
         )
         return None
 
     def set_embedding(self) -> nn.Embedding:
+        atchley_dim: int = atchley_weight.shape[1]
         embedding = np.zeros([outdim, atchley_dim])
         embedding[
             1:,
@@ -254,7 +255,7 @@ class ConvGRUMLPVAE(nn.Module):
         """
         logp = out.log_softmax(dim=2)
         ## [batch_size, seq_max_len, outdim]
-        w: torch.Tensor = blosum62[x].to(out.device)
+        w: torch.Tensor = self.blosum62[x].to(out.device)
         ## [batch_size, seq_max_len, outdim]
         wlogp: torch.Tensor = logp * w
         ## [batch_size, seq_max_len]
@@ -290,3 +291,56 @@ class ConvGRUMLPVAE(nn.Module):
         z = normal_reparam(z_mu, z_logvar)
         out = self.decoder(z)
         return (z, out, z_mu, z_logvar, x, l, m)
+
+
+class ConvGRUMLPVAE(GRUMLPVAE):
+    def __init__(
+        self,
+        decode_inner_size: int,
+        latent_size: int = 48,
+        hidden_size: int = 16,
+        out_channels: int = 32,
+        rnndp: float = 0.0,
+        raw_blosum: bool = False,
+        bidirectional: bool = False,
+    ) -> None:
+        super().__init__(
+            latent_size=latent_size,
+            hidden_size=hidden_size,
+            decode_inner_size=decode_inner_size,
+            raw_blosum=raw_blosum,
+            bidirectional=bidirectional,
+            rnndp=rnndp,
+        )
+        # self.decode_l2: int = 4 * self.latent_size
+        self.encoder: ConvGRUEncoder = ConvGRUEncoder(
+            embedding=self.embedding,
+            hidden_size=hidden_size,
+            out_channels=out_channels,
+            rnndp=rnndp,
+            bidirectional=bidirectional,
+        )
+        return None
+
+
+class BiGRUMLPVAE(GRUMLPVAE):
+    def __init__(
+        self,
+        latent_size: int,
+        hidden_size: int,
+        decode_inner_size: int,
+        raw_blosum: bool = False,
+        rnndp: float = 0.0,
+    ) -> None:
+        super().__init__(
+            latent_size=latent_size,
+            hidden_size=hidden_size,
+            decode_inner_size=decode_inner_size,
+            raw_blosum=raw_blosum,
+            bidirectional=True,
+            rnndp=rnndp,
+        )
+        self.encoder: BiGRUEncoder = BiGRUEncoder(
+            embedding=self.embedding, hidden_size=hidden_size, rnndp=rnndp
+        )
+        return None

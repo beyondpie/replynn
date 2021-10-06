@@ -233,7 +233,9 @@ class GRUMLPVAE(nn.Module):
     def encode(
         self, padx: torch.LongTensor, len_of_x: torch.LongTensor
     ) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
-        _, lh = self.encoder(padx=padx, len_of_x=len_of_x, lh=None)
+        _, lh = self.encoder(
+            padx=padx, len_of_x=len_of_x, lh=None, enforce_sorted=False
+        )
         z_mu: torch.Tensor = self.mumlp(lh)
         z_logvar: torch.Tensor = self.logvmlp(lh)
         return (z_mu, z_logvar)
@@ -279,7 +281,8 @@ class GRUMLPVAE(nn.Module):
         lce = -torch.sum(lce)
         return (lb, lce)
 
-    def forward(
+    ## deprecated
+    def sorted_forward(
         self, padx: torch.LongTensor, len_of_x: torch.LongTensor, mask: torch.Tensor
     ):
         """Get z, pred_out, z_mu, z_logvar in order."""
@@ -291,6 +294,12 @@ class GRUMLPVAE(nn.Module):
         z = normal_reparam(z_mu, z_logvar)
         out = self.decoder(z)
         return (z, out, z_mu, z_logvar, x, l, m)
+
+    def forward(self, padx: torch.LongTensor, len_of_x: torch.LongTensor):
+        z_mu, z_logvar = self.encode(padx=padx, len_of_x=len_of_x)
+        z = normal_reparam(z_mu, z_logvar)
+        out = self.decoder(z)
+        return (z, out, z_mu, z_logvar)
 
 
 class ConvGRUMLPVAE(GRUMLPVAE):

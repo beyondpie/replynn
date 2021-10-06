@@ -77,7 +77,7 @@ class GRUEncoder(nn.Module):
         """
         embeded = self.embedding(padx)
         embeded = torch.transpose(input=embeded, dim0=1, dim1=2)
-        afembed = self.after_embed_hook(embeded)
+        afembed = self.after_embed_hook(embeded, len_of_x)
         packedx = nn.utils.rnn.pack_padded_sequence(
             afembed, len_of_x.cpu(), batch_first=True, enforce_sorted=enforce_sorted
         )
@@ -120,11 +120,19 @@ class ConvGRUEncoder(GRUEncoder):
             dilation=1,
             bias=True,
         )
+        self.ln :nn.Module = nn.LayerNorm(normalized_shape=self.embed_dim,
+                                          eps = 1e-5, elementwise_affine=True)
 
     def after_embed_hook(self, embedx: torch.FloatTensor) -> torch.Tensor:
+        ## conv1d on: [N, C_in, L], and generate [N, C_out, L]
+        embedx = torch.transpose(input = embedx, dim0 = 1, dim1 = 2)
+        ## embeded will occupy one position after the end of the sequence.
+        ## we currently ignore this since layer in RNN, we have the length info,
+        ## which will ignore this.
         convembed = self.conv1d3mer(embedx)
         convembed = torch.transpose(input=convembed, dim0=1, dim1=2)
-        ## TODO: add batch normalization
+        ## layer normalization
+        convembed = self.ln(convembed)
         return convembed
 
 

@@ -174,7 +174,7 @@ class MLPDecoder(nn.Module):
         return r
 
 
-class GRUMLPVAE(nn.Module):
+class GRUMLP3VAE(nn.Module):
     def __init__(
         self,
         latent_size: int,
@@ -302,7 +302,7 @@ class GRUMLPVAE(nn.Module):
         return (z, out, z_mu, z_logvar)
 
 
-class ConvGRUMLPVAE(GRUMLPVAE):
+class ConvGRUMLP3VAE(GRUMLP3VAE):
     def __init__(
         self,
         decode_inner_size: int,
@@ -332,7 +332,7 @@ class ConvGRUMLPVAE(GRUMLPVAE):
         return None
 
 
-class BiGRUMLPVAE(GRUMLPVAE):
+class BiGRUMLP3VAE(GRUMLP3VAE):
     def __init__(
         self,
         latent_size: int,

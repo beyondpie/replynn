@@ -56,7 +56,7 @@ class SubjectEmbedDataset(Dataset):
         return self.x[id], self.mask[id], self.y[id]
 
 
-class ReplyDataSet(Dataset):
+class VAEDataset(Dataset):
     def __init__(self, cdr3s: List[str]):
         self.cdr3s: List[str] = cdr3s
 
@@ -75,10 +75,13 @@ class ReplyDataSet(Dataset):
     def __len__(self) -> int:
         return len(self.cdr3s)
 
+class VAEDataLoader(DataLoader):
+    def __init__(self, ds: VAEDataset, batch_size:int, shuffle: bool, pin_memory: bool = True):
+        super().__init__(dataset = ds, batch_size = batch_size, shuffle = shuffle, pin_memory = pin_memory)
 
-def set_reply_dataloader(
+def set_VAEDataLoader(
     config: Tuple[str, str, int, int], shuffle: bool = False
-) -> DataLoader:
+) -> VAEDataLoader:
     fnm, sep, aa_col, batch_size = config
     with open(fnm, "r") as f:
         lines: List[str] = f.readlines()
@@ -87,8 +90,8 @@ def set_reply_dataloader(
         cdr3: str = l.rstrip().split(sep)[aa_col]
         if len(cdr3) <= seq_max_len:
             cdr3s.append(cdr3)
-    ds: ReplyDataSet = ReplyDataSet(cdr3s=cdr3s)
-    dl: DataLoader = DataLoader(
+    ds: VAEDataset = VAEDataset(cdr3s=cdr3s)
+    dl: VAEDataLoader = VAEDataLoader(
         dataset=ds, batch_size=batch_size, shuffle=shuffle, pin_memory=True
     )
     return dl

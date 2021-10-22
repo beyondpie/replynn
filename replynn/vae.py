@@ -6,6 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data.dataloader import DataLaoder
 from .data import outdim, atchley_weight, raw_blosum_score, nng_blosum_score
+from .data import VAEDataLoader
 
 
 def sort_seq_by_len(
@@ -37,30 +38,6 @@ def kl_to_stdn(mu: torch.FloatTensor, logvar: torch.FloatTensor) -> torch.Tensor
     """
     kl = -0.5 * torch.sum(1 + logvar - torch.pow(mu, 2) - torch.exp(logvar))
     return kl
-
-def get_vae_loss(model: GRUMLP3VAE,
-                 x: torch.Tensor, l: torch.Tensor,
-                 m: torch.Tensor,
-                 is_train: bool = False, device: str = "cpu") -> Dict[str, torch.Tensor]:
-    dev = torch.device(device)
-    if not torch.cuda.is_availble():
-        dev = torch.device("cpu")
-    model.to(dev)
-    model.train(mode = is_train)
-    x = x.to(dev)
-    l = l.to(dev)
-    m = m.to(dev)
-    z, out, z_mu, z_logvar = model(padx = x, len_of_x = l)
-    lb, lce = model.reconst_loss(out = out, x = x, l = l, m = m)
-    kld = kl_to_stdn(mu = z_mu, logvar = z_logvar)
-    batch_size = x.shape[0]
-    loss: Dict[str, torch.Tensor] = {
-        "lbosum": lb / batch_size,
-        "lce": lce / batch_size,
-        "kl": kld / batch_size
-    }
-    return loss
-    
 
 class GRUEncoder(nn.Module):
     def __init__(
@@ -367,3 +344,54 @@ class BiGRUMLP3VAE(GRUMLP3VAE):
             embedding=self.embedding, hidden_size=hidden_size, rnndp=rnndp
         )
         return None
+
+def get_vae_loss(model: GRUMLP3VAE,
+                 x: torch.Tensor, l: torch.Tensor,
+                 m: torch.Tensor,
+                 is_train: bool = False,
+                 device: str = "cpu",
+                 normalize: bool = True) -> Dict[str, torch.Tensor]:
+    dev = torch.device(device)
+    if not torch.cuda.is_availble():
+        dev = torch.device("cpu")
+    model.to(dev)
+    model.train(mode = is_train)
+    x = x.to(dev)
+    l = l.to(dev)
+    m = m.to(dev)
+    z, out, z_mu, z_logvar = model(padx = x, len_of_x = l)
+    lb, lce = model.reconst_loss(out = out, x = x, l = l, m = m)
+    kld = kl_to_stdn(mu = z_mu, logvar = z_logvar)
+    if normalize:
+        batch_size = x.shape[0]
+        loss: Dict[str, torch.Tensor] = {
+            "lblosum": lb / batch_size,
+            "lce": lce / batch_size,
+            "kl": kld / batch_size}
+    else:
+        loss: Dict[str, torch.Tensor] = {
+            "lblosum": lb,
+            "lce": lce,
+            "kl": kld
+        }
+    return loss
+
+def get_vae_loss_from_VAEDataLoader(dl: VAEDataLoader,
+                                    model: GRUMLP3VAE,
+                                    device: str = "cpu") -> Dict[str, float]:
+    batch_size: int = len(dl.dataset)
+    lb = torch.zeros([1], device=device, dtype=torch.float)
+    lce = torch.zeros_like(lb)
+    kl = torch.zeros_like(lb)
+    for x, l, m in dl:
+        loss = get_vae_loss(model = model, x = x, l = l, m = m,
+                            is_train = False, device = device, normalize= False)
+        lb = loss["lblosum"] + lb
+        lce = loss["lce"] + lce
+        kl = loss["kl"] + kl
+    loss = {
+        "lblosum": (lb / batch_size).item(),
+        "lce": (lce / batch_size).item(),
+        "kl": (kl / batch_size).item()
+    }
+    return loss

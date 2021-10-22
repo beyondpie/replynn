@@ -29,7 +29,7 @@ def empty_content_under_dir(folder) -> None:
     return None
 
 
-def setup_logger(name: str, log_file: str, level=logging.DEBUG) -> Logger:
+def set_logger(name: str, log_file: str, level=logging.DEBUG) -> Logger:
     """Setup as many loggers as we want."""
     formatter = logging.Formatter("%(asctime)s:%(levelname)s:%(message)s")
     handler = logging.FileHandler(log_file)

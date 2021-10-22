@@ -4,6 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.utils.data.dataloader import DataLaoder
 from .data import outdim, atchley_weight, raw_blosum_score, nng_blosum_score
 
 
@@ -37,6 +38,29 @@ def kl_to_stdn(mu: torch.FloatTensor, logvar: torch.FloatTensor) -> torch.Tensor
     kl = -0.5 * torch.sum(1 + logvar - torch.pow(mu, 2) - torch.exp(logvar))
     return kl
 
+def get_vae_loss(model: GRUMLP3VAE,
+                 x: torch.Tensor, l: torch.Tensor,
+                 m: torch.Tensor,
+                 is_train: bool = False, device: str = "cpu") -> Dict[str, torch.Tensor]:
+    dev = torch.device(device)
+    if not torch.cuda.is_availble():
+        dev = torch.device("cpu")
+    model.to(dev)
+    model.train(mode = is_train)
+    x = x.to(dev)
+    l = l.to(dev)
+    m = m.to(dev)
+    z, out, z_mu, z_logvar = model(padx = x, len_of_x = l)
+    lb, lce = model.reconst_loss(out = out, x = x, l = l, m = m)
+    kld = kl_to_stdn(mu = z_mu, logvar = z_logvar)
+    batch_size = x.shape[0]
+    loss: Dict[str, torch.Tensor] = {
+        "lbosum": lb / batch_size,
+        "lce": lce / batch_size,
+        "kl": kld / batch_size
+    }
+    return loss
+    
 
 class GRUEncoder(nn.Module):
     def __init__(
@@ -262,21 +286,11 @@ class GRUMLP3VAE(nn.Module):
         wlogp: torch.Tensor = logp * w
         ## [batch_size, seq_max_len]
         ele_lb = torch.sum(wlogp, dim=2) * m
-        ## [batch_size], normalized by sequence length
-        ## NOTE: remove the normalization by sequence length
-        # if self.normalize_seq > 0:
-        #     lb = torch.sum(input=ele_lb, dim=1) / l.to(torch.float)
-        # else:
         lb = torch.sum(input=ele_lb, dim=1)
         lb = -torch.sum(lb)
         ## cross entropy loss
         ## [batch_size, seq_max_len], ignore the padding index
         ele_logp = torch.sum(logp * F.one_hot(x, num_classes=outdim), dim=2) * m
-        ## [batch_size], normalized by sequence length
-        # if self.normalize_seq > 0:
-        #     lce = torch.sum(ele_logp, dim=1) / l.to(torch.float)
-        # else:
-        ## NOTE: remove the normalization by sequence length
         lce = torch.sum(ele_logp, dim=1)
         lce = -torch.sum(lce)
         return (lb, lce)

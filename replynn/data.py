@@ -6,12 +6,11 @@ from torch.utils.data.dataloader import DataLoader
 import numpy as np
 
 
-
 pad_id: int = 0
 outdim: int = 21
 seq_max_len: int = 30
 ## set atchley
-atchleyf: str = pkg_resources.resource_filename('replynn', 'data/atchley_factors.csv')
+atchleyf: str = pkg_resources.resource_filename("replynn", "data/atchley_factors.csv")
 atchley_dim: int = 5
 atchley_weight: np.ndarray = np.loadtxt(
     fname=atchleyf, delimiter=",", skiprows=1, usecols=tuple(range(1, atchley_dim + 1))
@@ -24,7 +23,7 @@ word2index: Dict[str, int] = {k: (i + 1) for i, k in enumerate(AAs)}
 index2word: Dict[int, str] = {v: k for k, v in word2index.items()}
 
 ## blosum62
-blosum62f :str = pkg_resources.resource_filename('replynn', 'data/blosum62.iij')
+blosum62f: str = pkg_resources.resource_filename("replynn", "data/blosum62.iij")
 blosum62: np.ndarray = np.loadtxt(
     fname=blosum62f, comments="#", usecols=tuple(range(1, 25))
 )
@@ -78,9 +77,15 @@ class VAEDataset(Dataset):
     def __len__(self) -> int:
         return len(self.cdr3s)
 
+
 class VAEDataLoader(DataLoader):
-    def __init__(self, ds: VAEDataset, batch_size:int, shuffle: bool, pin_memory: bool = True):
-        super().__init__(dataset = ds, batch_size = batch_size, shuffle = shuffle, pin_memory = pin_memory)
+    def __init__(
+        self, ds: VAEDataset, batch_size: int, shuffle: bool, pin_memory: bool = True
+    ):
+        super().__init__(
+            dataset=ds, batch_size=batch_size, shuffle=shuffle, pin_memory=pin_memory
+        )
+
 
 def set_VAEDataLoader(
     config: Tuple[str, str, int, int], shuffle: bool = False
@@ -95,6 +100,6 @@ def set_VAEDataLoader(
             cdr3s.append(cdr3)
     ds: VAEDataset = VAEDataset(cdr3s=cdr3s)
     dl: VAEDataLoader = VAEDataLoader(
-        dataset=ds, batch_size=batch_size, shuffle=shuffle, pin_memory=True
+        ds=ds, batch_size=batch_size, shuffle=shuffle, pin_memory=True
     )
     return dl

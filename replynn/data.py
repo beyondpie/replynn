@@ -1,14 +1,17 @@
-from typing import Dict, List, OrderedDict
+import pkg_resources
+from typing import Dict, List, OrderedDict, Tuple
 import torch
 from torch.utils.data import Dataset
 from torch.utils.data.dataloader import DataLoader
+import numpy as np
+
 
 
 pad_id: int = 0
 outdim: int = 21
 seq_max_len: int = 30
 ## set atchley
-atchleyf: str = "atchley_factors.csv"
+atchleyf: str = pkg_resources.resource_filename('replynn', 'data/atchley_factors.csv')
 atchley_dim: int = 5
 atchley_weight: np.ndarray = np.loadtxt(
     fname=atchleyf, delimiter=",", skiprows=1, usecols=tuple(range(1, atchley_dim + 1))
@@ -21,7 +24,7 @@ word2index: Dict[str, int] = {k: (i + 1) for i, k in enumerate(AAs)}
 index2word: Dict[int, str] = {v: k for k, v in word2index.items()}
 
 ## blosum62
-blosum62f: str = "blosum62.iij"
+blosum62f :str = pkg_resources.resource_filename('replynn', 'data/blosum62.iij')
 blosum62: np.ndarray = np.loadtxt(
     fname=blosum62f, comments="#", usecols=tuple(range(1, 25))
 )

@@ -24,5 +24,10 @@ setuptools.setup(
         'torch',
         'torchvision',
         'torchaudio'
-    ]
+    ],
+    include_package_data = True,
+    packages = ['replynn'],
+    package_dir = {'replynn': 'replynn'},
+    package_data = {'replynn': ['data/*']},
+    zip_safe = True,
 )

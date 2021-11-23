@@ -1,4 +1,4 @@
 .PHONY: install
 
 install:
-	pip install -e .
+	python3 -m pip install -e .

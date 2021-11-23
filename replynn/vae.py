@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data.dataloader import DataLaoder
+from torch.utils.data import DataLoader
 from .data import outdim, atchley_weight, raw_blosum_score, nng_blosum_score
 from .data import VAEDataLoader
 

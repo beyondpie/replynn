@@ -187,6 +187,7 @@ class GRUMLP3VAE(nn.Module):
     ):
         super().__init__()
         self.set_embedding()
+        self.bidirectional: bool = bidirectional
         ## NOTE/TODO: move self.blosum62 to device when needed.
         if raw_blosum:
             self.blosum62: torch.Tensor = torch.from_numpy(raw_blosum_score).to(

@@ -81,7 +81,7 @@ class GRUEncoder(nn.Module):
         """
         embeded = self.embedding(padx)
         embeded = torch.transpose(input=embeded, dim0=1, dim1=2)
-        afembed = self.after_embed_hook(embeded, len_of_x)
+        afembed = self.after_embed_hook(embeded)
         packedx = nn.utils.rnn.pack_padded_sequence(
             afembed, len_of_x.cpu(), batch_first=True, enforce_sorted=enforce_sorted
         )
@@ -356,7 +356,7 @@ def get_vae_loss(model: GRUMLP3VAE,
                  device: str = "cpu",
                  normalize: bool = True) -> Dict[str, torch.Tensor]:
     dev = torch.device(device)
-    if not torch.cuda.is_availble():
+    if not torch.cuda.is_available():
         dev = torch.device("cpu")
     model.to(dev)
     model.train(mode = is_train)

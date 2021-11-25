@@ -44,6 +44,7 @@ class GRUEncoder(nn.Module):
         self,
         embedding: nn.Module,
         hidden_size: int,
+            out_channels:int, 
         rnndp: float = 0.0,
         bidirectional: bool = False,
     ):
@@ -51,9 +52,10 @@ class GRUEncoder(nn.Module):
         self.dpr = rnndp
         self.embedding: nn.Module = embedding
         self.embed_dim: int = self.embedding.embedding_dim
-        self.hidden_size = hidden_size
+        self.hidden_size:int = hidden_size
+        self.out_channels:int = out_channels
         self.rnn: nn.Module = nn.GRU(
-            input_size=out_channels,
+            input_size= self.out_channels,
             hidden_size=self.hidden_size,
             num_layers=1,
             bias=True,
@@ -149,6 +151,7 @@ class BiGRUEncoder(GRUEncoder):
         super().__init__(
             embedding=embedding,
             hidden_size=hidden_size,
+            out_channels = embedding.embedding_dim,
             rnndp=rnndp,
             bidirectional=True,
         )

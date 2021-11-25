@@ -186,7 +186,7 @@ class GRUMLP3VAE(nn.Module):
         rnndp: float,
     ):
         super().__init__()
-        self.set_embedding()
+        self.embedding = self.set_embedding()
         self.bidirectional: bool = bidirectional
         ## NOTE/TODO: move self.blosum62 to device when needed.
         if raw_blosum:

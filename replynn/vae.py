@@ -80,7 +80,6 @@ class GRUEncoder(nn.Module):
         check torch.nn.utils.rnn.PackedSequence class for details.
         """
         embeded = self.embedding(padx)
-        embeded = torch.transpose(input=embeded, dim0=1, dim1=2)
         afembed = self.after_embed_hook(embeded)
         packedx = nn.utils.rnn.pack_padded_sequence(
             afembed, len_of_x.cpu(), batch_first=True, enforce_sorted=enforce_sorted
@@ -286,13 +285,13 @@ class GRUMLP3VAE(nn.Module):
         )
         m = mask.index_select(dim=0, index=sorted_indices)
         z_mu, z_logvar = self.encode(padx=x, len_of_x=l)
-        z = normal_reparam(z_mu, z_logvar)
+        z = randn(z_mu, z_logvar)
         out = self.decoder(z)
         return (z, out, z_mu, z_logvar, x, l, m)
 
     def forward(self, padx: torch.LongTensor, len_of_x: torch.LongTensor):
         z_mu, z_logvar = self.encode(padx=padx, len_of_x=len_of_x)
-        z = normal_reparam(z_mu, z_logvar)
+        z = randn(z_mu, z_logvar)
         out = self.decoder(z)
         return (z, out, z_mu, z_logvar)
 
